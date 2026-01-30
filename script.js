@@ -1,5 +1,5 @@
 /**
- * Sales Management Tool Logic - Enhanced with Edit Function
+ * Sales Management Tool Logic - Enhanced with Edit & Delete Function
  */
 
 // --- Data Store ---
@@ -9,7 +9,6 @@ const Store = {
         const data = localStorage.getItem(Store.getKey());
         return data ? JSON.parse(data) : [];
     },
-    // IDで1件取得
     getById: (id) => {
         const data = Store.getAll();
         return data.find(r => r.id === id);
@@ -19,14 +18,19 @@ const Store = {
         data.push(record);
         localStorage.setItem(Store.getKey(), JSON.stringify(data));
     },
-    // 既存データの更新
     update: (id, updatedRecord) => {
         const data = Store.getAll();
         const index = data.findIndex(r => r.id === id);
         if (index !== -1) {
-            data[index] = { ...updatedRecord, id }; // IDを維持して更新
+            data[index] = { ...updatedRecord, id };
             localStorage.setItem(Store.getKey(), JSON.stringify(data));
         }
+    },
+    // --- 削除機能の追加 ---
+    remove: (id) => {
+        const data = Store.getAll();
+        const filteredData = data.filter(r => r.id !== id);
+        localStorage.setItem(Store.getKey(), JSON.stringify(filteredData));
     },
     seed: () => {
         const demoData = [
@@ -42,7 +46,7 @@ const Store = {
 // --- App Logic ---
 const app = {
     currentPage: 'dashboard',
-    editingId: null, // 編集中のデータのIDを保持
+    editingId: null,
 
     init: () => {
         app.render();
@@ -50,9 +54,17 @@ const app = {
 
     navigateTo: (pageId, id = null) => {
         app.currentPage = pageId;
-        app.editingId = id; // IDがあれば編集モード
+        app.editingId = id;
         app.updateNavState();
         app.render();
+    },
+
+    // --- 削除実行ロジック ---
+    deleteRecord: (id) => {
+        if (confirm('この売上データを削除してもよろしいですか？')) {
+            Store.remove(id);
+            app.render(); // 一覧を再描画
+        }
     },
 
     updateNavState: () => {
@@ -73,7 +85,6 @@ const app = {
             pageTitle.textContent = 'ダッシュボード';
             contentArea.innerHTML = UI.getDashboardHTML();
         } else if (app.currentPage === 'entry') {
-            // 編集モードか新規登録かでタイトルを変更
             pageTitle.textContent = app.editingId ? '売上編集' : '売上登録';
             const editData = app.editingId ? Store.getById(app.editingId) : null;
             contentArea.innerHTML = UI.getEntryFormHTML(editData);
@@ -91,24 +102,18 @@ const app = {
 const UI = {
     getDashboardHTML: () => {
         const data = Store.getAll();
-        const currentYear = new Date().getFullYear();
-        const currentMonth = new Date().getMonth() + 1;
-
         const calcTotal = (records) => records.reduce((sum, r) => sum + Number(r.amount), 0);
         const calcProfit = (records) => records.reduce((sum, r) => sum + (Number(r.amount) - Number(r.outsourcingCost)), 0);
-
-        const totalSales = calcTotal(data);
-        const totalProfit = calcProfit(data);
 
         return `
             <div class="dashboard-grid">
                 <div class="card stat-card">
                     <span class="stat-title">全体総売上</span>
-                    <span class="stat-value">¥${totalSales.toLocaleString()}</span>
+                    <span class="stat-value">¥${calcTotal(data).toLocaleString()}</span>
                 </div>
                 <div class="card stat-card">
                     <span class="stat-title">全体粗利</span>
-                    <span class="stat-value" style="color: var(--success)">¥${totalProfit.toLocaleString()}</span>
+                    <span class="stat-value" style="color: var(--success)">¥${calcProfit(data).toLocaleString()}</span>
                 </div>
             </div>
             ${data.length === 0 ? '<button onclick="Store.seed()" class="btn btn-primary">デモデータを生成</button>' : ''}
@@ -116,7 +121,6 @@ const UI = {
     },
 
     getEntryFormHTML: (data = null) => {
-        // dataがあれば編集モード、なければ新規登録
         const isEdit = !!data;
         return `
             <div class="card" style="max-width: 800px; margin: 0 auto;">
@@ -177,11 +181,9 @@ const UI = {
 
             if (app.editingId) {
                 Store.update(app.editingId, record);
-                alert('更新しました');
             } else {
                 record.id = Date.now().toString();
                 Store.add(record);
-                alert('登録しました');
             }
             app.navigateTo('list');
         });
@@ -192,14 +194,19 @@ const UI = {
         const rows = data.map(r => `
             <tr>
                 <td>${r.date}</td>
-                <td>${r.repName}</td>
+                <td>${r.repName === 'Naito' ? '内藤' : r.repName === 'Yokosaka' ? '横坂' : '佐川'}</td>
                 <td>${r.client}</td>
                 <td>${r.projectName}</td>
                 <td style="text-align: right;">¥${Number(r.amount).toLocaleString()}</td>
                 <td style="text-align: center;">
-                    <button class="btn" style="padding: 0.25rem 0.5rem; background: #e2e8f0;" onclick="app.navigateTo('entry', '${r.id}')">
-                        編集
-                    </button>
+                    <div style="display: flex; gap: 0.5rem; justify-content: center;">
+                        <button class="btn" style="padding: 0.25rem 0.5rem; background: #e2e8f0; font-size: 0.8rem;" onclick="app.navigateTo('entry', '${r.id}')">
+                            編集
+                        </button>
+                        <button class="btn" style="padding: 0.25rem 0.5rem; background: #fee2e2; color: #dc2626; font-size: 0.8rem;" onclick="app.deleteRecord('${r.id}')">
+                            削除
+                        </button>
+                    </div>
                 </td>
             </tr>
         `).join('');
